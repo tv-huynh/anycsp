@@ -27,3 +27,12 @@ To evaluate the models, use the corresponding evaluation scripts:
 bash scripts/eval_maxcut.sh
 ```
 
+### Note
+If conda dependency installation as described above fail, the following alternative commands may help:
+
+```
+conda create --name anycsp python=3.10
+conda activate anycsp
+pip install torch==2.0.0+cu117 --index-url https://download.pytorch.org/whl/cu117
+pip install -r requirements.txt -f https://data.pyg.org/whl/torch-2.0.0+cu117.html
+```
