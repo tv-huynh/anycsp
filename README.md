@@ -28,7 +28,7 @@ bash scripts/eval_maxcut.sh
 ```
 
 ### Note
-If conda dependency installation as described above fail, the following alternative commands may help:
+If conda dependency installation as described above fails, the following alternative commands may help:
 
 ```
 conda create --name anycsp python=3.10
