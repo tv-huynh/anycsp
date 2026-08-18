@@ -49,6 +49,84 @@ class KSAT_Generator:
         )
         return data
 
+class PWKSAT_Generator:
+
+    def __init__(self, min_n=100, max_n=100, min_k=3, max_k=3, min_alpha=4.0, max_alpha=5.0, min_soft_pct=0.3, max_soft_pct=0.7, soft_weight_min=1, soft_weight_max=100, hard_weight=None):
+        self.min_n = min_n
+        self.max_n = max_n
+        self.min_k = min_k
+        self.max_k = max_k
+        self.min_alpha = min_alpha
+        self.max_alpha = max_alpha
+        self.min_soft_pct = min_soft_pct
+        self.max_soft_pct = max_soft_pct
+        self.soft_weight_min = soft_weight_min
+        self.soft_weight_max = soft_weight_max
+        self.hard_weight = hard_weight # if None, derived below
+
+    def create_random_instance(self):
+        k = np.random.randint(self.min_k, self.max_k + 1)
+        n = np.random.randint(self.min_n, self.max_n + 1)
+        alpha = np.random.uniform(self.min_alpha, self.max_alpha)
+        m = max(int(np.ceil(n * alpha)), 1)
+        cnf = cnfgen.RandomKCNF(k, n, m)
+        
+        cnf = [cls for cls in cnf.clauses()]
+        cnf = [np.int64(c) for c in cnf]
+
+        # Split total number of clauses m into hard and soft clauses
+        soft_pct = np.random.uniform(self.min_soft_pct, self.max_soft_pct)
+        num_soft = int(np.ceil(m * soft_pct))
+        num_hard = m - num_soft 
+
+        # Assign weights to hard and soft clauses
+        weights = np.zeros(len(cnf), dtype=np.int64)
+        if self.hard_weight is not None:
+            hard_weight = self.hard_weight
+        else:
+            hard_weight = max(num_soft, 1) * self.soft_weight_max + 1
+        weights[:num_hard] = hard_weight
+        weights[num_hard:] = np.random.uniform(self.soft_weight_min, self.soft_weight_max + 1, size=num_soft)
+
+        # Same as KSAT_Generator, but with weights
+        num_var = np.max([np.abs(c).max() for c in cnf])
+        num_const = len(cnf)
+
+        arity = np.int64([c.size for c in cnf])
+        const_idx = np.arange(0, num_const, dtype=np.int64)
+        tuple_idx = np.repeat(const_idx, arity)
+
+        cat = np.concatenate(cnf, axis=0)
+        var_idx = np.abs(cat) - 1
+        val_idx = np.int64(cat > 0).reshape(-1)
+
+        data = CSP_Data(num_var=num_var, domain_size=2)
+        data.add_constraint_data(
+            True,
+            torch.tensor(const_idx),
+            torch.tensor(tuple_idx),
+            torch.tensor(var_idx),
+            torch.tensor(val_idx),
+            weight=torch.tensor(weights, dtype=torch.float32),
+        )
+        return data
+
+# Test if the data pipeline is correctly modified to accept, store, move-to-device, and re-concatenate the weight tensor
+data = PWKSAT_Generator(min_n=10, max_n=10, min_k=3, max_k=3, min_alpha=4.0, max_alpha=4.0, min_soft_pct=0.3, max_soft_pct=0.7, soft_weight_min=1, soft_weight_max=100).create_random_instance()
+print(data.constraints['ext'].weight)
+print(data.constraints['ext'].weight.shape)
+data.init_adj()
+assignment = data.hard_assign_sample(torch.ones(data.num_val))[0]
+print(data.count_unsat(assignment)) 
+
+data = KSAT_Generator(min_n=20, max_n=20).create_random_instance()
+data.init_adj()
+print(data.weight)          # should be all 1.0
+print(data.batch_total_weight)  # should exactly equal data.batch_num_cst
+print(data.batch_num_cst)
+data.init_adj()
+assignment = data.hard_assign_sample(torch.ones(data.num_val))[0]
+print(data.count_unsat(assignment)) 
 
 class COL_Generator_Base:
 
@@ -196,6 +274,7 @@ class MC_ER_Generator:
 
 generator_dict = {
     'KSAT': KSAT_Generator,
+    'PWKSAT': PWKSAT_Generator,
     'COL': COL_GNM_Generator,
     'COL_GNM': COL_GNM_Generator,
     'COL_BA': COL_BA_Generator,

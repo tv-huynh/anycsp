@@ -11,21 +11,26 @@ from torch.utils.data import Dataset
 
 
 def load_cnf_file(path):
+    """
+    Converts a .dimacs cnf (conjunctive normal form) file into a CSP_Data object
+    :param path: the path to a .dimacs cnf file
+    :return: A CSP_Data object representing the cnf formula
+    """
     cnf = load_dimacs_cnf(path)
     cnf = [np.int64(c) for c in cnf]
 
-    num_var = np.max([np.abs(c).max() for c in cnf])
-    num_const = len(cnf)
+    num_var = np.max([np.abs(c).max() for c in cnf]) # as variables are 1-indexed in dimacs format, we can use the max variable index as the number of variables
+    num_const = len(cnf) # as each clause is a constraint, the number of constraints is equal to the number of clauses
 
-    arity = np.int64([c.size for c in cnf])
-    const_idx = np.arange(0, num_const, dtype=np.int64)
-    tuple_idx = np.repeat(const_idx, arity)
+    arity = np.int64([c.size for c in cnf]) # length of each clause
+    const_idx = np.arange(0, num_const, dtype=np.int64) # indices of each constraint
+    tuple_idx = np.repeat(const_idx, arity) # each literal in a clause gets a tuple index equal to the index of the clause it belongs to
 
     cat = np.concatenate(cnf, axis=0)
-    var_idx = np.abs(cat) - 1
-    val_idx = np.int64(cat > 0).reshape(-1)
+    var_idx = np.abs(cat) - 1 # 0-indexed variable indices
+    val_idx = np.int64(cat > 0).reshape(-1) # 1 if literal is positive, 0 if literal is negative
 
-    data = CSP_Data(num_var=num_var, domain_size=2, path=path)
+    data = CSP_Data(num_var=num_var, domain_size=2, path=path) # domain -> {0, 1} for false/true assignment
     data.add_constraint_data(
         True,
         torch.tensor(const_idx),
@@ -37,6 +42,12 @@ def load_cnf_file(path):
 
 
 def nx_to_col(nx_graph, num_colors):
+    """
+    Converts a NetworkX graph into a CSP_Data object representing the graph coloring problem
+    :param nx_graph: The graph as a NetworkX graph object
+    :param num_colors: The number of colors to use for coloring the graph
+    :return: A CSP_Data object representing the graph coloring problem
+    """ 
     num_vert = nx_graph.order()
     num_edges = nx_graph.number_of_edges()
 
@@ -52,7 +63,7 @@ def nx_to_col(nx_graph, num_colors):
     val_idx = np.repeat(np.arange(0, num_colors, dtype=np.int64), 2)
     val_idx = np.tile(val_idx, (num_edges,))
 
-    data = CSP_Data(num_var=num_vert, domain_size=num_colors)
+    data = CSP_Data(num_var=num_vert, domain_size=num_colors) # domain -> {0, 1, ..., num_colors - 1} for coloring variables
     data.add_constraint_data(
         True,
         torch.tensor(const_idx),
@@ -64,6 +75,13 @@ def nx_to_col(nx_graph, num_colors):
 
 
 def nx_to_maxcut(nx_graph, edge_weights=None, path=None):
+    """
+    Converts a NetworkX graph into a CSP_Data object representing the maxcut problem
+    :param nx_graph: The graph as a NetworkX graph object
+    :param edge_weights: The weights of the edges in the graph, if any
+    :param path: The path to the file from which the graph was loaded, if any
+    :return: A CSP_Data object representing the maxcut problem
+    """ 
     num_vert = nx_graph.order()
     num_edges = nx_graph.number_of_edges()
 
@@ -83,7 +101,7 @@ def nx_to_maxcut(nx_graph, edge_weights=None, path=None):
         edge_weights = np.ones((num_edges,), dtype=np.int64)
     cst_type = (edge_weights + 1) // 2
 
-    data = CSP_Data(num_var=num_vert, domain_size=2, path=path)
+    data = CSP_Data(num_var=num_vert, domain_size=2, path=path) # domain -> {0, 1} for which side of the cut
     data.add_constraint_data(
         True,
         torch.tensor(const_idx),

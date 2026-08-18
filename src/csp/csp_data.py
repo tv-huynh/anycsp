@@ -22,40 +22,42 @@ class CSP_Data:
         self.num_cst = 0
         self.num_tup_sampled = 0
 
-        if isinstance(domain_size, torch.Tensor):
+        if isinstance(domain_size, torch.Tensor): # different per-variable domain sizes
             self.domain_size = domain_size
-        else:
+        else: # domain size is a single integer, i.e., every variable has the same domain size
             self.domain_size = domain_size * torch.ones((num_var,), dtype=torch.int64)
 
-        self.num_val = int(self.domain_size.sum().numpy())
-        self.max_dom = int(self.domain_size.max().numpy())
+        self.num_val = int(self.domain_size.sum().numpy()) # total number of values across all variables (e.g., 200 for 100 booleans)
+        self.max_dom = int(self.domain_size.max().numpy()) # largest domain size
 
-        self.var_idx = torch.repeat_interleave(torch.arange(0, num_var, dtype=torch.int64), self.domain_size)
-        self.var_off = torch.cat([torch.tensor([0]), torch.cumsum(self.domain_size, dim=0)[:-1]], dim=0)
-        self.dom_idx = torch.arange(self.num_val) - self.var_off[self.var_idx]
+        self.var_idx = torch.repeat_interleave(torch.arange(0, num_var, dtype=torch.int64), self.domain_size) # index of the variable each value belongs to
+        self.var_off = torch.cat([torch.tensor([0]), torch.cumsum(self.domain_size, dim=0)[:-1]], dim=0) # offset of the first value of each variable in the flattened value array
+        self.dom_idx = torch.arange(self.num_val) - self.var_off[self.var_idx] # index of the value within its variable's domain (e.g., 0 for the first value, 1 for the second value, etc.)
 
         if domain is not None:
             self.domain = domain
         else:
             self.domain = torch.arange(self.num_val) - self.var_off[self.var_idx]
 
-        self.var_reg = 1.0 / (self.domain_size + 1.0e-8).view(-1, 1)
+        # Regularization terms for the variables, constraints, and values
+        self.var_reg = 1.0 / (self.domain_size + 1.0e-8).view(-1, 1) # depends on domain size
         self.cst_reg = None
         self.val_reg = None
 
+        # Standard PyG-style batching index: which instance (in a batch of instances) each variable belongs to
         self.batch = torch.zeros((num_var,), dtype=torch.int64) if batch is None else batch
         self.batch_size = int(self.batch.max().numpy()) + 1
         self.batch_num_cst = torch.zeros((self.batch_size,), dtype=torch.float32)
 
-        self.batch_num_val = scatter_sum(self.domain_size, self.batch, dim=0)
-        self.batch_val_off = torch.zeros((self.batch_size,), dtype=torch.long)
+        self.batch_num_val = scatter_sum(self.domain_size, self.batch, dim=0) # for each instance, sums up the domain sizes of all its variables (total value node count per batch instance)
+        self.batch_val_off = torch.zeros((self.batch_size,), dtype=torch.long) # for each instance, the offset of the first value node in the flattened value array
         self.batch_val_off[1:] = torch.cumsum(self.batch_num_val[:-1], dim=0)
-        self.batch_val_idx = torch.arange(self.num_val)
+        self.batch_val_idx = torch.arange(self.num_val) # index of the value node within its batch instance (e.g., 0 for the first value node, 1 for the second value node, etc.)
         self.batch_val_idx -= self.batch_val_off[self.batch[self.var_idx]]
-        self.max_num_val = self.batch_num_val.max().numpy()
+        self.max_num_val = self.batch_num_val.max().numpy() # largest value node count across all batch instances
 
         self.num_edges = 0
-        self.constraints = {}
+        self.constraints = {} # will contain each named constraint group ('ext', 'all_diff', etc.)
         self.cst_batch = None
         self.cst_edges = None
         self.LE = None
@@ -64,6 +66,10 @@ class CSP_Data:
         self.device = 'cpu'
 
     def to(self, device):
+        """
+        Moves the CSP_Data object to the specified device (CPU or GPU)
+        :param device: The device to move the CSP_Data object to
+        """ 
         self.device = device
         self.var_idx = self.var_idx.to(device)
         self.var_reg = self.var_reg.to(device)
@@ -80,6 +86,11 @@ class CSP_Data:
 
     @staticmethod
     def collate(batch):
+        """
+        Collates a list of CSP_Data objects into a single CSP_Data object, for use in batching
+        :param batch: A list of CSP_Data objects to collate
+        :return: A single CSP_Data object containing all the data from the input batch
+        """
         num_var = [d.num_var for d in batch]
         var_off = np.concatenate([[0], np.cumsum(num_var)[:-1]], axis=0)
         num_val = [d.num_val for d in batch]
@@ -108,7 +119,10 @@ class CSP_Data:
         return batch_data
 
     def init_adj(self):
-        cst_edges, cst_batch = [], []
+        """
+        Initializes the adjacency information for the CSP_Data object, including constraint edges and batches
+        """ 
+        cst_edges, cst_batch, weight = [], [], []
         cst_off = 0
         for cst_data in self.constraints.values():
             cur_edges = cst_data.cst_edges.clone()
@@ -116,12 +130,15 @@ class CSP_Data:
             cst_edges.append(cur_edges)
 
             cst_batch.append(cst_data.batch)
+            weight.append(cst_data.weight)
             self.num_edges += cst_data.num_edges
             cst_off += cst_data.num_cst
 
         self.cst_edges = torch.cat(cst_edges, dim=1)
         self.cst_batch = torch.cat(cst_batch, dim=0)
+        self.weight = torch.cat(weight, dim=0)
         self.batch_num_cst = degree(self.cst_batch, num_nodes=self.batch_size, dtype=torch.int64)
+        self.batch_total_weight = scatter_sum(self.weight, self.cst_batch, dim=0, dim_size=self.batch_size)
 
     def update_LE(self):
         self.LE = torch.cat([cst_data.LE for cst_data in self.constraints.values()], dim=0).flatten().long()
@@ -135,7 +152,7 @@ class CSP_Data:
             cst_data = cst_data.collate([(cst_old, 0, 0, 0), (cst_data, 0, 0, 0)], self)
             self.constraints[name] = cst_data
 
-    def add_constraint_data(self, negate, cst_idx, tup_idx, var_idx, val_idx, cst_type=None):
+    def add_constraint_data(self, negate, cst_idx, tup_idx, var_idx, val_idx, cst_type=None, weight=None):
         num_cst = cst_idx.max().numpy() + 1
         if cst_type is None:
             cst_type = torch.ones((num_cst,), dtype=torch.int64) if negate else torch.zeros((num_cst,), dtype=torch.int64)
@@ -149,7 +166,8 @@ class CSP_Data:
             cst_idx=cst_idx,
             tup_idx=tup_idx,
             val_idx=val_node_idx,
-            cst_type=cst_type
+            cst_type=cst_type,
+            weight=weight
         )
 
         self.add_constraint_data_(cst_data, 'ext')
@@ -275,10 +293,12 @@ class CSP_Data:
 
     def count_unsat(self, assignment_one_hot):
         unsat = 1.0 - self.constraint_is_sat(assignment_one_hot).float()
+        unsat = unsat * self.weight.view(-1,1)
         num_unsat = scatter_sum(unsat, self.cst_batch, dim=0, dim_size=self.batch_size)
         return num_unsat
 
     def count_sat(self, assignment_one_hot):
         sat = self.constraint_is_sat(assignment_one_hot).float()
+        sat = sat * self.weight.view(-1,1)
         sat = scatter_sum(sat, self.cst_batch, dim=0, dim_size=self.batch_size)
         return sat

@@ -57,7 +57,8 @@ class ANYCSP(Module):
         logits = torch.ones((data.num_val,), device=data.device, dtype=torch.float32)
         assignment, _ = data.hard_assign_sample(logits)
         cst_sat = data.constraint_is_sat(assignment, update_LE=True)
-        num_unsat = scatter_sum(1.0 - cst_sat, data.cst_batch, dim=0, dim_size=data.batch_size)
+        weighted_unsat = (1.0-cst_sat) * data.weight.view(-1,1)
+        num_unsat = scatter_sum(weighted_unsat, data.cst_batch, dim=0, dim_size=data.batch_size)
         return assignment, num_unsat
 
     def update_assignment(self, data, logits, assignment):
@@ -66,7 +67,8 @@ class ANYCSP(Module):
         else:
             assignment, log_prob = data.hard_assign_sample(logits)
         cst_sat = data.constraint_is_sat(assignment, update_LE=True)
-        num_unsat = scatter_sum(1.0 - cst_sat, data.cst_batch, dim=0, dim_size=data.batch_size)
+        weighted_unsat = (1.0-cst_sat) * data.weight.view(-1,1)
+        num_unsat = scatter_sum(weighted_unsat, data.cst_batch, dim=0, dim_size=data.batch_size)
         return assignment, num_unsat, log_prob
 
     def forward(

@@ -4,8 +4,8 @@ import torch
 def reward_improve(data):
     # Our default reward scheme: Difference to previous best clipped at 0
     with torch.no_grad():
-        reward = data.batch_num_cst.view(-1, 1) - data.all_num_unsat
-        reward /= data.batch_num_cst.view(-1, 1) + 1.0e-8
+        reward = data.batch_total_weight.view(-1, 1) - data.all_num_unsat
+        reward /= data.batch_total_weight.view(-1, 1) + 1.0e-8
         reward = reward - reward[:, 0].view(-1, 1)
 
         max_prior = torch.cummax(reward, dim=1)[0]
@@ -18,8 +18,8 @@ def reward_improve(data):
 def reward_quality(data):
     # Naive reward scheme used in our ablation study
     with torch.no_grad():
-        reward = data.batch_num_cst.view(-1, 1) - data.all_num_unsat
-        reward /= data.batch_num_cst.view(-1, 1) + 1.0e-8
+        reward = data.batch_total_weight.view(-1, 1) - data.all_num_unsat
+        reward /= data.batch_total_weight.view(-1, 1) + 1.0e-8
         reward = reward - reward[:, 0].view(-1, 1)
         return reward
 

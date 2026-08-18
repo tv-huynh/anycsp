@@ -5,7 +5,7 @@ from torch_scatter import scatter_sum, scatter_min, scatter_max, segment_max_csr
 
 class Constraint_Data_Base:
 
-    def __init__(self, csp_data, cst_edges, cst_var_edges, batch=None):
+    def __init__(self, csp_data, cst_edges, cst_var_edges, batch=None, weight=None):
         self.cst_edges = cst_edges
         self.cst_var_edges = cst_var_edges
 
@@ -20,6 +20,9 @@ class Constraint_Data_Base:
         self.batch = batch if batch is not None else torch.zeros((self.num_cst,), dtype=torch.int64)
         self.batch_size = int(self.batch.max().numpy())
 
+        # Per-constraint weight, defaulting to all-ones (unweighted case)
+        self.weight = weight if weight is not None else torch.ones((self.num_cst,), dtype=torch.float32)
+
         self.device = 'cpu'
 
     def to(self, device):
@@ -30,6 +33,7 @@ class Constraint_Data_Base:
         self.cst_deg = self.cst_deg.to(device)
         self.cst_arity = self.cst_arity.to(device)
         self.val_deg = self.val_deg.to(device)
+        self.weight = self.weight.to(device)
 
     def update_LE_(self, **kwargs):
         raise NotImplementedError
@@ -40,7 +44,7 @@ class Constraint_Data_Base:
 
 class Constraint_Data(Constraint_Data_Base):
 
-    def __init__(self, csp_data, cst_idx, tup_idx, val_idx, cst_type, cst_edges=None, cst_var_edges=None, lit_edge_map=None, batch=None):
+    def __init__(self, csp_data, cst_idx, tup_idx, val_idx, cst_type, cst_edges=None, cst_var_edges=None, lit_edge_map=None, batch=None, weight=None):
         self.cst_idx = cst_idx
         self.tup_idx = tup_idx
         self.val_idx = val_idx
@@ -71,6 +75,7 @@ class Constraint_Data(Constraint_Data_Base):
                 cst_edges=cst_edges,
                 cst_var_edges=cst_var_edges,
                 batch=batch,
+                weight=weight
         )
 
         self.num_tup = tup_idx.max().numpy() + 1
@@ -97,7 +102,7 @@ class Constraint_Data(Constraint_Data_Base):
 
     @staticmethod
     def collate(batch_list, merged_csp_data):
-        cst_idx, tup_idx, val_idx, cst_type, batch_idx = [], [], [], [], []
+        cst_idx, tup_idx, val_idx, cst_type, batch_idx, weight = [], [], [], [], [], []
         cst_off, tup_off, edge_off = 0, 0, 0
         cst_val_edges, cst_var_edges, lit_edge_map = [], [], []
         for cst_data, var_off, val_off, i in batch_list:
@@ -118,6 +123,7 @@ class Constraint_Data(Constraint_Data_Base):
             lit_edge_map.append(cst_data.lit_edge_map + edge_off)
 
             cst_type.append(cst_data.cst_type)
+            weight.append(cst_data.weight)
             batch_idx.append(cst_data.batch + i)
 
             cst_off += cst_data.num_cst
@@ -132,6 +138,7 @@ class Constraint_Data(Constraint_Data_Base):
         cst_val_edges = torch.cat(cst_val_edges, dim=1)
         cst_var_edges = torch.cat(cst_var_edges, dim=1)
         lit_edge_map = torch.cat(lit_edge_map, dim=0)
+        weight = torch.cat(weight, dim=0)
 
         batch_cst_data = Constraint_Data(
             csp_data=merged_csp_data,
@@ -143,6 +150,7 @@ class Constraint_Data(Constraint_Data_Base):
             cst_edges=cst_val_edges,
             cst_var_edges=cst_var_edges,
             lit_edge_map=lit_edge_map,
+            weight=weight,
         )
         return batch_cst_data
 

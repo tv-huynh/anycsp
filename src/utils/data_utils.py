@@ -7,16 +7,21 @@ import scipy
 
 
 def load_dimacs_graph(path):
+    """
+    Loads a graph from a file in dimacs format
+    :param path: the path to a .dimacs file in dimacs format
+    :return: The graph as a NetworkX graph object
+    """
     f = open(path, 'r')
     g = nx.Graph()
     for line in f:
         s = line.split()
         if s[0] == 'p':
-            g.add_nodes_from(range(int(s[2])))
+            g.add_nodes_from(range(int(s[2]))) # node
         elif s[0] == 'e':
-            if len(s) == 4:
+            if len(s) == 4: # weighted edge
                 g.add_edge(int(s[1]) - 1, int(s[2]) - 1, weight=int(s[3]))
-            else:
+            else: # unweighted edge
                 g.add_edge(int(s[1])-1, int(s[2])-1)
 
     f.close()
@@ -24,20 +29,22 @@ def load_dimacs_graph(path):
 
 
 def write_dimacs_graph(graph, path):
+    """
+    Stores a graph in the dimacs format
+    :param graph: The graph as a NetworkX graph object
+    :param path: The path to a file in which the graph will be stored
+    """
     f = open(path, 'w')
-    
     f.write(f'p edge {graph.number_of_nodes()} {graph.number_of_edges()}\n')
-
     for u, v in graph.edges():
         f.write(f'e {int(u)+1} {int(v)+1}\n')
-
     f.close()
 
 
 def load_graphs(path):
     """
-    Loads the graphs from all '.adj' files in NetworkX adjacency list format
-    :param path: The pattern under which to look for .adj files
+    Loads the graphs from all '.dimacs' files in NetworkX adjacency list format
+    :param path: The pattern under which to look for .dimacs files
     :return: A list of NetworkX graphs
     """
     paths = glob.glob(os.path.join(path, '*.dimacs'), recursive=True)
@@ -82,11 +89,9 @@ def write_dimacs_cnf(f, path):
     :param path: The path to a file in which f is will be stored
     """
     file = open(path, 'w')
-    
     num_v = np.max([np.max(np.abs(clause)) for clause in f])
     num_c = len(f)
     file.write(f'p cnf {num_v} {num_c}\n')
-
     for clause in f:
         line = ''
         for l in clause:
@@ -98,7 +103,11 @@ def write_dimacs_cnf(f, path):
 
 
 def load_formulas(path, weighted=False):
-    """ Loads cnf formulas from all .cnf files found under the pattern 'path' """
+    """ Loads cnf formulas from all .cnf files found under the pattern 'path'
+    :param path: The pattern under which to look for .cnf files
+    :param weighted: Whether the formulas are weighted or not
+    :return: A list of formulas, each formula is a list of lists of signed integers
+    """
     paths = glob.glob(os.path.join(path, f'**/*.{"wcnf" if weighted else "cnf"}'), recursive=True)
     formulas = [load_dimacs_cnf(p, weighted) for p in tqdm(paths)]
     names = [os.path.basename(p) for p in paths]
@@ -106,6 +115,11 @@ def load_formulas(path, weighted=False):
 
 
 def load_mtx(path):
+    """
+    Loads a graph from a file in mtx format
+    :param path: the path to a .mtx file in mtx format
+    :return: The graph as a NetworkX graph object
+    """
     with open(path, 'r') as f:
         g = nx.Graph()
         weights = []
@@ -129,6 +143,11 @@ def load_mtx(path):
 
 
 def load_mc(path):
+    """
+    Loads a graph from a file in mc format
+    :param path: the path to a .mc file in mc format
+    :return: The graph as a NetworkX graph object
+    """ 
     with open(path, 'r') as f:
         g = nx.Graph()
         weights = []
