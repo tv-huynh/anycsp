@@ -36,3 +36,15 @@ conda activate anycsp
 pip install torch==2.0.0+cu117 --index-url https://download.pytorch.org/whl/cu117
 pip install -r requirements.txt -f https://data.pyg.org/whl/torch-2.0.0+cu117.html
 ```
+
+Or, alternatively, only with pip:
+```
+python3.10 -m venv .venv
+source .venv/bin/activate
+pip install torch==2.0.0+cu117 --extra-index-url https://download.pytorch.org/whl/cu117
+pip install -r requirements.txt -f https://data.pyg.org/whl/torch-2.0.0+cu117.html
+```
+In this case, pip may need to downgrade numpy via
+```
+pip install "numpy<2"
+```
