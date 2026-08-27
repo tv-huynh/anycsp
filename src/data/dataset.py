@@ -40,6 +40,35 @@ def load_cnf_file(path):
     )
     return data
 
+def load_wcnf_file(path):
+    """
+    Converts a weighted .wcnf file (DIMACS-style, weight as first token per clause line)
+    into a CSP_Data object representing the weighted partial MaxSAT formula.
+    """
+    cnf, weights = load_dimacs_cnf(path, weighted=True)
+    cnf = [np.int64(c) for c in cnf]
+
+    num_var = np.max([np.abs(c).max() for c in cnf])
+    num_const = len(cnf)
+
+    arity = np.int64([c.size for c in cnf])
+    const_idx = np.arange(0, num_const, dtype=np.int64)
+    tuple_idx = np.repeat(const_idx, arity)
+
+    cat = np.concatenate(cnf, axis=0)
+    var_idx = np.abs(cat) - 1
+    val_idx = np.int64(cat > 0).reshape(-1)
+
+    data = CSP_Data(num_var=num_var, domain_size=2, path=path)
+    data.add_constraint_data(
+        True,
+        torch.tensor(const_idx),
+        torch.tensor(tuple_idx),
+        torch.tensor(var_idx),
+        torch.tensor(val_idx),
+        weight=torch.tensor(weights, dtype=torch.float32),
+    )
+    return data
 
 def nx_to_col(nx_graph, num_colors):
     """
@@ -149,6 +178,8 @@ class File_Dataset(Dataset):
             data = load_xcsp3(file_path)
         elif postfix == 'cnf':
             data = load_cnf_file(file_path)
+        elif postfix == 'wcnf':
+            data = load_wcnf_file(file_path)
         elif postfix == 'mc':
             data = load_mc_file(file_path)
         elif postfix == 'mtx':

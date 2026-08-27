@@ -198,7 +198,7 @@ if __name__ == '__main__':
         if val_loader is not None:
             unsat, solved = validate()
 
-            print(f'Mean Unsat Count: {unsat:.2f}, Solved: {100 * solved:.2f}%')
+            print(f'Mean Unsat Weight/Count: {unsat:.2f}, Solved: {100 * solved:.2f}%')
             if unsat < best_unsat:
                 model.save_model(name='best')
                 best_unsat = unsat

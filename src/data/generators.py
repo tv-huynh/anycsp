@@ -112,7 +112,7 @@ class PWKSAT_Generator:
         return data
 
 # Test if the data pipeline is correctly modified to accept, store, move-to-device, and re-concatenate the weight tensor
-data = PWKSAT_Generator(min_n=10, max_n=10, min_k=3, max_k=3, min_alpha=4.0, max_alpha=4.0, min_soft_pct=0.3, max_soft_pct=0.7, soft_weight_min=1, soft_weight_max=100).create_random_instance()
+"""data = PWKSAT_Generator(min_n=10, max_n=10, min_k=3, max_k=3, min_alpha=4.0, max_alpha=4.0, min_soft_pct=0.3, max_soft_pct=0.7, soft_weight_min=1, soft_weight_max=100).create_random_instance()
 print(data.constraints['ext'].weight)
 print(data.constraints['ext'].weight.shape)
 data.init_adj()
@@ -126,7 +126,7 @@ print(data.batch_total_weight)  # should exactly equal data.batch_num_cst
 print(data.batch_num_cst)
 data.init_adj()
 assignment = data.hard_assign_sample(torch.ones(data.num_val))[0]
-print(data.count_unsat(assignment)) 
+print(data.count_unsat(assignment)) """
 
 class COL_Generator_Base:
 
