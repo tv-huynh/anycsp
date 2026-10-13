@@ -1,5 +1,6 @@
 # Data
 data/
+data_savilerow/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
