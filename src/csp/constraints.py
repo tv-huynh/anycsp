@@ -287,7 +287,7 @@ class Constraint_Data_All_Diff(Constraint_Data_Base):
 
 class Constraint_Data_Linear(Constraint_Data_Base):
 
-    def __init__(self, csp_data, cst_idx, var_idx, coeffs, b, comp_op, cst_edges=None, cst_var_edges=None, cst_var_dom_size=None, batch=None):
+    def __init__(self, csp_data, cst_idx, var_idx, coeffs, b, comp_op, cst_edges=None, cst_var_edges=None, cst_var_dom_size=None, batch=None, weight=None):
         self.cst_idx = cst_idx
         self.var_idx = var_idx
         self.coeffs = coeffs
@@ -311,7 +311,8 @@ class Constraint_Data_Linear(Constraint_Data_Base):
             csp_data=csp_data,
             cst_edges=cst_edges,
             cst_var_edges=cst_var_edges,
-            batch=batch
+            batch=batch,
+            weight=weight
         )
 
         self.cst_var_dom_size = cst_var_dom_size
@@ -333,7 +334,7 @@ class Constraint_Data_Linear(Constraint_Data_Base):
 
     @staticmethod
     def collate(batch_list, merged_csp_data):
-        cst_idx, var_idx, coeffs, b, comp_op, batch_idx = [], [], [], [], [], []
+        cst_idx, var_idx, coeffs, b, comp_op, batch_idx, weight = [], [], [], [], [], [], []
         cst_off, edge_off = 0, 0
         cst_val_edges, cst_var_edges, cst_var_dom_size = [], [], []
         for cst_data, var_off, val_off, i in batch_list:
@@ -342,6 +343,7 @@ class Constraint_Data_Linear(Constraint_Data_Base):
             coeffs.append(cst_data.coeffs)
             b.append(cst_data.b)
             comp_op.append(cst_data.comp_op)
+            weight.append(cst_data.weight)
 
             cur_cst_val_edges = cst_data.cst_edges.clone()
             cur_cst_val_edges[0] += cst_off
@@ -369,6 +371,7 @@ class Constraint_Data_Linear(Constraint_Data_Base):
         cst_val_edges = torch.cat(cst_val_edges, dim=1)
         cst_var_edges = torch.cat(cst_var_edges, dim=1)
         cst_var_dom_size = torch.cat(cst_var_dom_size, dim=0)
+        weight = torch.cat(weight, dim=0)
 
         batch_cst_data = Constraint_Data_Linear(
             csp_data=merged_csp_data,
@@ -381,6 +384,7 @@ class Constraint_Data_Linear(Constraint_Data_Base):
             cst_edges=cst_val_edges,
             cst_var_edges=cst_var_edges,
             cst_var_dom_size=cst_var_dom_size,
+            weight=weight
         )
         return batch_cst_data
 
@@ -410,7 +414,7 @@ class Constraint_Data_Linear(Constraint_Data_Base):
     def update_LE_(self, assignment, lin_comb, val_sel, **kwargs):
         var_lin_comb = lin_comb[self.cst_var_edges[0]] - val_sel
         val_lin_comb = torch.repeat_interleave(var_lin_comb, self.cst_var_dom_size) + self.scaled_val
-        #comp_mask = self.compare_(val_lin_comb, self.b_expanded, self.comp_op_expanded)
+        comp_mask = self.compare_(val_lin_comb, self.b_expanded, self.comp_op_expanded)
 
         diff = val_lin_comb - self.b_expanded
         cost = torch.stack([
@@ -420,9 +424,10 @@ class Constraint_Data_Linear(Constraint_Data_Base):
             ], dim=1
         )
         cost = cost[torch.arange(diff.shape[0], device=diff.device), self.comp_op_expanded]
-        self.LE = cost.float().view(-1, 1)
+        #self.LE = cost.float().view(-1, 1)
+        self.LE = comp_mask.long().view(-1, 1)
 
-    def is_sat(self, assignment, update_val_comp=False):
+    def is_sat(self, assignment, update_val_comp=False): # check if a given assignment satisfies the linear constraints
         assignment = assignment.int()
         val_sel = self.scaled_val[assignment[self.cst_edges[1]].flatten().bool()]
         lin_comb = scatter_sum(val_sel, self.cst_var_edges[0], dim=0)

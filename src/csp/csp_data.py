@@ -211,7 +211,7 @@ class CSP_Data:
         )
         self.add_constraint_data_(cst_data, f'all_diff')
 
-    def add_linear_constraint_data(self, var_idx, coeffs, b, comp):
+    def add_linear_constraint_data(self, var_idx, coeffs, b, comp, weight=None):
         cst_idx = torch.arange(var_idx.shape[0])
         cst_idx = torch.repeat_interleave(cst_idx, var_idx.shape[1])
 
@@ -220,7 +220,7 @@ class CSP_Data:
 
         comp_op = torch.tensor([Constraint_Data_Linear.comp_idx(c) for c in comp])
 
-        cst_data = Constraint_Data_Linear(self, cst_idx, var_idx.flatten(), coeffs.flatten(), b.flatten(), comp_op)
+        cst_data = Constraint_Data_Linear(self, cst_idx, var_idx.flatten(), coeffs.flatten(), b.flatten(), comp_op, weight=weight)
         self.add_constraint_data_(cst_data, f'linear')
 
     def value_softmax(self, value_logits):
