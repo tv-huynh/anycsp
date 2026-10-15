@@ -2,7 +2,7 @@ import os
 from timeit import default_timer as timer
 import torch
 from torch.nn import Module, GRUCell
-from torch_scatter import scatter_sum
+from torch_scatter import scatter_sum, scatter_max
 
 from src.model.layers import Val2Val_Layer, Cst2Val_Layer, Val2Cst_Layer, Policy
 from src.utils.config_utils import read_config, write_config
@@ -54,12 +54,19 @@ class ANYCSP(Module):
         return model
 
     def init_assignment(self, data):
-        logits = torch.ones((data.num_val,), device=data.device, dtype=torch.float32)
-        assignment, _ = data.hard_assign_sample(logits)
-        cst_sat = data.constraint_is_sat(assignment, update_LE=True)
-        weighted_unsat = (1.0-cst_sat) * data.weight.view(-1,1)
-        num_unsat = scatter_sum(weighted_unsat, data.cst_batch, dim=0, dim_size=data.batch_size)
-        return assignment, num_unsat
+        logits = torch.ones((data.num_val,), device=data.device, dtype=torch.float32) # shape [num_val] with all ones
+        assignment, _ = data.hard_assign_sample(logits) # sample an initial assignment based on the logits
+        cst_sat = data.constraint_is_sat(assignment, update_LE=True) # shape [num_cst, 1], entries: 1 if satisfied, 0 if not
+        weighted_unsat = (1.0-cst_sat) * data.weight.view(-1,1) # shape [num_cst, 1], entries: weight if unsatisfied, 0 if satisfied
+        num_unsat = scatter_sum(weighted_unsat, data.cst_batch, dim=0, dim_size=data.batch_size) # shape [batch_size, 1], entries: sum of weights of unsatisfied constraints for each instance in the batch
+        if self.config.get("partial_weighted") is not None:
+            instance_max_weight = scatter_max(data.weight, data.cst_batch, dim=0, dim_size=data.batch_size)[0]  # [batch_size,] — hard weight per instance
+            per_cst_threshold = instance_max_weight[data.cst_batch]  # [num_cst,] — each constraint's own instance's max
+            is_hard = (data.weight.view(-1, 1) >= per_cst_threshold.view(-1, 1)).float() # [num_cst, 1] — boolean mask for hard constraints
+        else:
+            is_hard = torch.ones_like(data.weight.view(-1, 1))  # treat everything as "hard" when there's no soft/hard split
+        num_hard_unsat = scatter_sum((1.0 - cst_sat) * is_hard, data.cst_batch, dim=0, dim_size=data.batch_size) # [batch_size, 1] — number of unsatisfied hard constraints for each instance in the batch
+        return assignment, num_unsat, num_hard_unsat
 
     def update_assignment(self, data, logits, assignment):
         if self.sampling == 'local':
@@ -69,7 +76,14 @@ class ANYCSP(Module):
         cst_sat = data.constraint_is_sat(assignment, update_LE=True)
         weighted_unsat = (1.0-cst_sat) * data.weight.view(-1,1)
         num_unsat = scatter_sum(weighted_unsat, data.cst_batch, dim=0, dim_size=data.batch_size)
-        return assignment, num_unsat, log_prob
+        if self.config.get("partial_weighted") is not None:
+            instance_max_weight = scatter_max(data.weight, data.cst_batch, dim=0, dim_size=data.batch_size)[0]
+            per_cst_threshold = instance_max_weight[data.cst_batch]
+            is_hard = (data.weight.view(-1, 1) >= per_cst_threshold.view(-1, 1)).float()
+        else:
+            is_hard = torch.ones_like(data.weight.view(-1, 1))
+        num_hard_unsat = scatter_sum((1.0 - cst_sat) * is_hard, data.cst_batch, dim=0, dim_size=data.batch_size)
+        return assignment, num_unsat, num_hard_unsat, log_prob
 
     def forward(
             self,
@@ -86,15 +100,17 @@ class ANYCSP(Module):
         data.init_adj()
 
         # initialize first assignment and states
-        assignment, num_unsat = self.init_assignment(data)
+        assignment, num_unsat, num_hard_unsat = self.init_assignment(data)
         h_val = self.h_val_init.tile(data.num_val, 1)
 
         data.best_num_unsat = num_unsat.min(dim=1)[0]
+        data.best_hard_unsat = num_hard_unsat.min(dim=1)[0]
         data.num_steps = 0
 
         value_assignment = data.domain[assignment.flatten().bool()]
         assignment_list = [value_assignment.view(-1, 1)]
         num_unsat_list = [data.best_num_unsat.view(-1, 1)]
+        num_hard_unsat_list = [data.best_hard_unsat.view(-1, 1)]
         log_prob_list = []
 
         opt = data.best_num_unsat.min()
@@ -118,18 +134,21 @@ class ANYCSP(Module):
             logits = self.policy(h_val)
 
             # sample next assignment
-            assignment, num_unsat, log_prob = self.update_assignment(data, logits, assignment)
+            assignment, num_unsat, num_hard_unsat, log_prob = self.update_assignment(data, logits, assignment)
             data.num_steps = s + 1
 
             # update all kinds of metrics...
-            num_unsat, best_assign = num_unsat.min(dim=1)
+            num_unsat, _ = num_unsat.min(dim=1)
+            num_hard_unsat, _ = num_hard_unsat.min(dim=1)
             data.best_num_unsat = torch.minimum(data.best_num_unsat, num_unsat)
+            data.best_hard_unsat = torch.minimum(data.best_hard_unsat, num_hard_unsat)
             cur_opt = data.best_num_unsat.min()
 
             if return_log_probs:
                 log_prob_list.append(log_prob.view(-1, 1))
             if return_all_unsat:
                 num_unsat_list.append(num_unsat.view(-1, 1))
+                num_hard_unsat_list.append(num_hard_unsat.view(-1, 1))
             if keep_time:
                 cur = timer()
                 time = float(cur - start)
@@ -154,6 +173,7 @@ class ANYCSP(Module):
             data.all_assignments = torch.cat(assignment_list, dim=1)
         if return_all_unsat:
             data.all_num_unsat = torch.cat(num_unsat_list, dim=1)
+            data.all_hard_unsat = torch.cat(num_hard_unsat_list, dim=1)
         if keep_time:
             data.total_time = time
         return data

@@ -1,6 +1,7 @@
 import torch
 from torch.nn import Module, Linear, Sequential, LayerNorm, ReLU
 from torch_geometric.utils import scatter
+from torch_scatter import scatter_max
 
 
 # general aggregation method with/without sparse_coo installation
@@ -58,7 +59,7 @@ class Cst2Val_Layer(Module):
 
         # M_C
         self.cst_send = Sequential(
-            Linear(self.hidden_dim, self.hidden_dim, bias=True),
+            Linear(self.hidden_dim + 1, self.hidden_dim, bias=True), # plus 1 dimension for weight feature
             ReLU(),
             Linear(self.hidden_dim, 2 * self.hidden_dim, bias=False),
             LayerNorm(2 * self.hidden_dim),
@@ -73,9 +74,25 @@ class Cst2Val_Layer(Module):
         )
 
     def forward(self, data, x_val, r_cst):
-        # Constraints generate msg
-        m_cst = self.cst_send(r_cst)
+        #### WITH WEIGHT FEATURE
+        # Normalize weight to a bounded, well-scaled feature
+        # such that hard constraints sit near 1.0 and soft constraints sit near 0
+        w = data.weight.view(-1, 1).float()
+        instance_max_weight = scatter_max(data.weight, data.cst_batch, dim=0, dim_size=data.batch_size)[0] # different instances may have different hard weights
+        per_cst_hard_weight = instance_max_weight[data.cst_batch].view(-1, 1).float()
+        w_feat = torch.log1p(w) / torch.log1p(per_cst_hard_weight)
+        r_cst_w = torch.cat([r_cst, w_feat], dim=1)
+
+        # Constraints generate msg, now weight-aware
+        m_cst = self.cst_send(r_cst_w)
         m_cst = m_cst.view(2 * data.num_cst, self.hidden_dim)
+        ### end WITH WEIGHT FEATURE
+
+        ### WIHOUT WEIGHT FEATURE
+        # Constraints generate msg
+        #m_cst = self.cst_send(r_cst)
+        #m_cst = m_cst.view(2 * data.num_cst, self.hidden_dim)
+        ###
 
         # Edge index from edge labels
         out_idx = 2 * data.cst_edges[0] + data.LE
