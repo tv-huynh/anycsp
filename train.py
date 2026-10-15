@@ -49,6 +49,8 @@ def train_epoch():
     unsat_list = []
     unsat_ratio_list = []
     solved_list = []
+    hard_unsat_list = []
+    feasible_list = []
 
     for data in tqdm(train_loader, total=len(train_loader), disable=args.no_bar, desc=f'Training Epoch {epoch+1}'):
         opt.zero_grad()
@@ -76,22 +78,31 @@ def train_epoch():
         best_unsat = data.best_num_unsat.view(-1)
         unsat_ratio = best_unsat / data.batch_num_cst.view(-1)
         solved = best_unsat == 0
+        best_hard_unsat = data.best_hard_unsat.view(-1) 
+        feasible = best_hard_unsat == 0 # true iff zero hard constraints are violated
 
         unsat_list.append(best_unsat.cpu())
         unsat_ratio_list.append(unsat_ratio.cpu())
         solved_list.append(solved.cpu())
+        hard_unsat_list.append(best_hard_unsat.cpu())
+        feasible_list.append(feasible.cpu())
 
         if (model.global_step + 1) % args.logging_steps == 0:
             unsat = torch.cat(unsat_list, dim=0)
             unsat_ratio = torch.cat(unsat_ratio_list, dim=0)
             solved = torch.cat(solved_list, dim=0)
+            feasible = torch.cat(feasible_list, dim=0)
             logger.add_scalar('Train/Loss', loss.mean(), model.global_step)
             logger.add_scalar('Train/Solved_Ratio', solved.float().mean(), model.global_step)
+            logger.add_scalar('Train/Feasible_Ratio', feasible.float().mean(), model.global_step)
             logger.add_scalar('Train/Unsat_Count', unsat.float().mean(), model.global_step)
             logger.add_scalar('Train/Unsat_Ratio', unsat_ratio.float().mean(), model.global_step)
+            logger.add_scalar('Train/Hard_Unsat_Count', best_hard_unsat.float().mean(), model.global_step)
             unsat_list = []
             unsat_ratio_list = []
             solved_list = []
+            hard_unsat_list = []
+            feasible_list = []
 
         if (model.global_step + 1) % args.checkpoint_steps == 0:
             model.save_model(name=f'checkpoint_{model.global_step}')
@@ -105,6 +116,8 @@ def validate():
     total_unsat = 0
     total_solved = 0
     total_count = 0
+    total_hard_unsat = 0
+    total_feasible = 0
 
     for data in tqdm(val_loader, disable=args.no_bar, desc=f'Validating'):
         data.to(device)
@@ -122,12 +135,18 @@ def validate():
         total_unsat += best_unsat.float().sum().cpu().numpy()
         total_solved += (best_unsat == 0).float().sum().cpu().numpy()
         total_count += data.batch_size
+        total_hard_unsat += data.best_hard_unsat.view(-1).float().sum().cpu().numpy()
+        total_feasible += (data.best_hard_unsat.view(-1) == 0).float().sum().cpu().numpy()
 
     unsat = total_unsat / total_count
     solved = total_solved / total_count
+    feasible = total_feasible / total_count
+    hard_unsat = total_hard_unsat / total_count
     logger.add_scalar('Val/Solved_Ratio', solved, model.global_step)
+    logger.add_scalar('Val/Feasible_Ratio', feasible, model.global_step)
     logger.add_scalar('Val/Unsat_Count', unsat, model.global_step)
-    return unsat, solved
+    logger.add_scalar('Val/Hard_Unsat_Count', hard_unsat, model.global_step)
+    return unsat, solved, feasible, hard_unsat
 
 
 if __name__ == '__main__':
@@ -141,6 +160,7 @@ if __name__ == '__main__':
     parser.add_argument("--from_last", action='store_true', default=False, help="Continue from existing last checkpoint")
     parser.add_argument("--pretrained_dir", type=str, default=None, help="Pretrained Model directory")
     parser.add_argument("--config", type=str, help="path the config file")
+    parser.add_argument("--no_load_opt_state", action='store_true', default=False, help="Don't load optimizer/scheduler state from pretrained_dir")
     args = parser.parse_args()
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
@@ -156,7 +176,7 @@ if __name__ == '__main__':
     if args.pretrained_dir is None:
         model = ANYCSP(args.model_dir, config)
     else:
-        model = ANYCSP.load(args.pretrained_dir, f'last')
+        model = ANYCSP.load_model(args.pretrained_dir, f'last')
         model.model_dir = args.model_dir
 
     model.to(device)
@@ -185,7 +205,8 @@ if __name__ == '__main__':
     scheduler = get_linear_scheduler()
     scaler = torch.cuda.amp.GradScaler()
 
-    if args.pretrained_dir is not None:
+    #if args.pretrained_dir is not None:
+    if args.pretrained_dir is not None and not args.no_load_opt_state:
         opt, scaler = load_opt_states(args.pretrained_dir)
 
     logger = SummaryWriter(args.model_dir)
@@ -196,9 +217,9 @@ if __name__ == '__main__':
         train_epoch()
 
         if val_loader is not None:
-            unsat, solved = validate()
+            unsat, solved, feasible, hard_unsat = validate()
 
-            print(f'Mean Unsat Weight/Count: {unsat:.2f}, Solved: {100 * solved:.2f}%')
+            print(f'Mean Unsat Weight/Count: {unsat:.2f}, Solved: {100 * solved:.2f}%, Feasible: {100 * feasible:.2f}%, Hard Unsat Count: {hard_unsat:.2f}')
             if unsat < best_unsat:
                 model.save_model(name='best')
                 best_unsat = unsat
