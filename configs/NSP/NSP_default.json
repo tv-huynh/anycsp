@@ -1,0 +1,34 @@
+{
+    "hidden_dim": 128,
+    "aggr_val2cst": "mean",
+    "aggr_cst2val": "mean",
+    "aggr_val2var": "mean",
+    "sampling": "global",
+    "T_train": 40,
+    "T_val": 200,
+    "epochs": 150,
+    "epoch_steps": 1000,
+    "lr": 5e-06,
+    "lr_decay": 0.1,
+    "weight_decay": 0.0,
+    "discount": 0.75,
+    "reward": "improve",
+    "batch_size": 10,
+    "val_batch_size": 10,
+    "partial_weighted": true,
+    "train_data": {
+        "FILES": {
+            "path": "data/test/NSP/*.nsp"
+        }
+    },
+    "val_data": {
+        "FILES": {
+            "path": "data/validation/NSP/*.nsp"
+        }
+    },
+    "test_data": {
+        "FILES": {
+            "path": "data/test/NSP/*.nsp"
+        }
+    }
+}

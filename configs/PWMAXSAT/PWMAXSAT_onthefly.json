@@ -26,7 +26,8 @@
             "min_soft_pct": 0.3,
             "max_soft_pct": 0.7,
             "soft_weight_min": 1,
-            "soft_weight_max": 100
+            "soft_weight_max": 100,
+            "hard_weight": 5000
         }
     },
     "val_data": {
