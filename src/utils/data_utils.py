@@ -3,7 +3,6 @@ import networkx as nx
 import os
 import glob
 from tqdm import tqdm
-import scipy
 
 
 def load_dimacs_graph(path):
@@ -102,8 +101,34 @@ def write_dimacs_cnf(f, path):
     return f
 
 
+def write_dimacs_wcnf(f, weights, path):
+    """
+    Stores a weighted cnf formula in the dimacs cnf format
+    :param f: The formula as a list of lists of signed integers.
+    :param weights: A list of weights for each clause
+    :param path: The path to a file in which f is will be stored
+    """
+    assert len(f) == len(weights) #weights must have one entry per clause
+    top = weights[0] # hard weight
+    assert top > 0
+
+    file = open(path, 'w')
+    num_v = np.max([np.max(np.abs(clause)) for clause in f]) # number of variables
+    num_c = len(f) # number of clauses
+    file.write(f'p wcnf {num_v} {num_c} {top}\n')
+    for clause, w in zip(f, weights):
+        line = f'{w} '
+        for l in clause:
+            line += f'{l} '
+        line += '0\n'
+        file.write(line)
+    file.close()
+    return f
+
+
 def load_formulas(path, weighted=False):
-    """ Loads cnf formulas from all .cnf files found under the pattern 'path'
+    """ 
+    Loads cnf formulas from all .cnf files found under the pattern 'path'
     :param path: The pattern under which to look for .cnf files
     :param weighted: Whether the formulas are weighted or not
     :return: A list of formulas, each formula is a list of lists of signed integers
@@ -112,6 +137,25 @@ def load_formulas(path, weighted=False):
     formulas = [load_dimacs_cnf(p, weighted) for p in tqdm(paths)]
     names = [os.path.basename(p) for p in paths]
     return names, formulas
+
+
+def load_nsp(path):
+    """
+    Parses nsp file.
+    """
+    file = open(path, 'r')
+    lines = [line.strip() for line in file if line.strip() != '']
+    file.close()
+
+    header = lines[0].split()
+    num_nurses, num_days, num_shifts = int(header[0]), int(header[1]), int(header[2])
+
+    coverage = [[int(c) for c in lines[1 + d].split()] for d in range(num_days)]
+
+    pref_offset = 1 + num_days
+    preference = [[int(c) for c in lines[pref_offset + n].split()] for n in range(num_nurses)]
+
+    return num_nurses, num_days, num_shifts, coverage, preference
 
 
 def load_mtx(path):
