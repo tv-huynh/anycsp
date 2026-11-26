@@ -128,7 +128,7 @@ def validate():
                     config['T_val'],
                     return_log_probs=False,
                     return_all_unsat=True,
-                    return_all_assignments=False
+                    return_all_assignments=True
                 )
 
         best_unsat = data.best_num_unsat.view(-1)

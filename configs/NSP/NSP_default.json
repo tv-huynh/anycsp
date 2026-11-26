@@ -18,17 +18,17 @@
     "partial_weighted": true,
     "train_data": {
         "FILES": {
-            "path": "data/test/NSP/*.nsp"
+            "path": "data_paper_clean/nsp/train/*.wcnf"
         }
     },
     "val_data": {
         "FILES": {
-            "path": "data/validation/NSP/*.nsp"
+            "path": "data_paper_clean/nsp/val/*.wcnf"
         }
     },
     "test_data": {
         "FILES": {
-            "path": "data/test/NSP/*.nsp"
+            "path": "data_paper_clean/nsp/test/*.wcnf"
         }
     }
 }

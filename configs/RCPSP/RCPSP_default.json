@@ -8,27 +8,27 @@
     "T_val": 200,
     "epochs": 150,
     "epoch_steps": 1000,
-    "lr": 1e-03,
+    "lr": 5e-06,
     "lr_decay": 0.1,
     "weight_decay": 0.0,
     "discount": 0.75,
     "reward": "improve",
-    "batch_size": 10,
-    "val_batch_size": 10,
+    "batch_size": 2,
+    "val_batch_size": 2,
     "partial_weighted": true,
     "train_data": {
         "FILES": {
-            "path": "data/test/RCPSP/*.wcnf"
+            "path": "data_paper_clean/rcpsp/train/*.wcnf"
         }
     },
     "val_data": {
         "FILES": {
-            "path": "data/validation/RCPSP/*.wcnf"
+            "path": "data_paper_clean/rcpsp/val/*.wcnf"
         }
     },
     "test_data": {
         "FILES": {
-            "path": "data/test/RCPSP/*.wcnf"
+            "path": "data_paper_clean/rcpsp/test/*.wcnf"
         }
     }
 }

@@ -1,0 +1,31 @@
+Die folgenden Module wurden nicht entladen:
+  (Benutzen Sie "module --force purge" um alle Module zu entladen):
+
+  1) release/25.06
+
+Die folgenden Module wurden in einer anderen Version erneut geladen:
+  1) release/25.06 => release/24.04
+
+Modules GCCcore/11.3.0, Python/3.10.4 and 11 dependencies loaded.
+0it [00:00, ?it/s]0it [00:00, ?it/s]
+0it [00:00, ?it/s]0it [00:00, ?it/s]
+Traceback (most recent call last):
+  File "/data/horse/ws/thhu694i-anycsp/train.py", line 205, in <module>
+    scheduler = get_linear_scheduler()
+  File "/data/horse/ws/thhu694i-anycsp/train.py", line 24, in get_linear_scheduler
+    scheduler = LambdaLR(opt, lr_lambda=lr_fn)
+  File "/data/horse/ws/thhu694i-anycsp/.venv-capella/lib/python3.10/site-packages/torch/optim/lr_scheduler.py", line 286, in __init__
+    super().__init__(optimizer, last_epoch)
+  File "/data/horse/ws/thhu694i-anycsp/.venv-capella/lib/python3.10/site-packages/torch/optim/lr_scheduler.py", line 132, in __init__
+    self._initial_step()
+  File "/data/horse/ws/thhu694i-anycsp/.venv-capella/lib/python3.10/site-packages/torch/optim/lr_scheduler.py", line 137, in _initial_step
+    self.step()
+  File "/data/horse/ws/thhu694i-anycsp/.venv-capella/lib/python3.10/site-packages/torch/optim/lr_scheduler.py", line 196, in step
+    values = self.get_lr()
+  File "/data/horse/ws/thhu694i-anycsp/.venv-capella/lib/python3.10/site-packages/torch/optim/lr_scheduler.py", line 334, in get_lr
+    return [
+  File "/data/horse/ws/thhu694i-anycsp/.venv-capella/lib/python3.10/site-packages/torch/optim/lr_scheduler.py", line 335, in <listcomp>
+    base_lr * lmbda(self.last_epoch)
+  File "/data/horse/ws/thhu694i-anycsp/train.py", line 23, in <lambda>
+    lr_fn = lambda step: max(1.0 - ((1.0 - decay) * (step / training_steps)), decay)
+ZeroDivisionError: division by zero

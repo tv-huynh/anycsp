@@ -6,29 +6,24 @@
     "sampling": "global",
     "T_train": 40,
     "T_val": 200,
-    "epochs": 150,
+    "epochs": 250,
     "epoch_steps": 1000,
-    "lr": 1e-03,
+    "lr": 5e-06,
     "lr_decay": 0.1,
     "weight_decay": 0.0,
     "discount": 0.75,
     "reward": "improve",
-    "batch_size": 10,
-    "val_batch_size": 10,
+    "batch_size": 300,
+    "val_batch_size": 300,
     "partial_weighted": true,
     "train_data": {
         "FILES": {
-            "path": "data/training/NSP_N25/*.wcnf"
+            "path": "data/test/PWMAXSAT/*.wcnf"
         }
     },
     "val_data": {
         "FILES": {
-            "path": "data/validation/NSP_N25/*.wcnf"
+            "path": "data/validation/PWMAXSAT/*.wcnf"
         }
-    },
-    "test_data": {
-        "FILES": {
-            "path": "data/test/NSP_N25/*.wcnf"
-        }
-    }   
+    }
 }
