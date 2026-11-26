@@ -1,6 +1,11 @@
-# Data
+# Data and assignments
 data/
 data_savilerow/
+data_paper/
+data_paper_clean/
+data_paper_compressed/
+assignments/
+logs_paper/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -155,6 +160,7 @@ activemq-data/
 .env
 .envrc
 .venv
+.venv-capella
 env/
 venv/
 ENV/
