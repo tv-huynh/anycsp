@@ -178,6 +178,8 @@ if __name__ == '__main__':
     else:
         model = ANYCSP.load_model(args.pretrained_dir, f'last')
         model.model_dir = args.model_dir
+        # memory setting comes from the current run's config, not the pretrained model's
+        model.config['grad_checkpoint'] = config.get('grad_checkpoint', False)
 
     model.to(device)
     model.train()

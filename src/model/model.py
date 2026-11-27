@@ -2,6 +2,7 @@ import os
 from timeit import default_timer as timer
 import torch
 from torch.nn import Module, GRUCell
+from torch.utils.checkpoint import checkpoint
 from torch_scatter import scatter_sum, scatter_max
 
 from src.model.layers import Val2Val_Layer, Cst2Val_Layer, Val2Cst_Layer, Policy
@@ -85,6 +86,20 @@ class ANYCSP(Module):
         num_hard_unsat = scatter_sum((1.0 - cst_sat) * is_hard, data.cst_batch, dim=0, dim_size=data.batch_size)
         return assignment, num_unsat, num_hard_unsat, log_prob
 
+    def mp_step(self, data, h_val, assignment, LE):
+        # one round of message passes
+        # LE (edge labels) is passed explicitly: data.LE is replaced after every step, and the
+        # backward recomputation under gradient checkpointing must see this step's labels
+        data.LE = LE
+        r_cst, x_val = self.val2cst(data, h_val, assignment)
+        y_val = self.cst2val(data, x_val, r_cst)
+        z_val = self.val2val(data, y_val)
+
+        # update states and predict logit scores
+        h_val = self.val_cell(z_val, h_val)
+        logits = self.policy(h_val)
+        return h_val, logits
+
     def forward(
             self,
             data,
@@ -123,15 +138,15 @@ class ANYCSP(Module):
             start = timer()
             data.opt_time = 0.0
 
-        for s in range(steps):
-            # one round of mes passes
-            r_cst, x_val = self.val2cst(data, h_val, assignment)
-            y_val = self.cst2val(data, x_val, r_cst)
-            z_val = self.val2val(data, y_val)
+        # gradient checkpointing: recompute each step's message passing during backward
+        # instead of storing its (edge-sized) activations for all steps -> much less GPU memory
+        use_ckpt = self.config.get('grad_checkpoint', False) and self.training and torch.is_grad_enabled()
 
-            # update states and predict logit scores
-            h_val = self.val_cell(z_val, h_val)
-            logits = self.policy(h_val)
+        for s in range(steps):
+            if use_ckpt:
+                h_val, logits = checkpoint(self.mp_step, data, h_val, assignment, data.LE, use_reentrant=False)
+            else:
+                h_val, logits = self.mp_step(data, h_val, assignment, data.LE)
 
             # sample next assignment
             assignment, num_unsat, num_hard_unsat, log_prob = self.update_assignment(data, logits, assignment)

@@ -4,8 +4,8 @@
     "aggr_cst2val": "mean",
     "aggr_val2var": "mean",
     "sampling": "global",
-    "T_train": 40,
-    "T_val": 200,
+    "T_train": 25,
+    "T_val": 100,
     "epochs": 150,
     "epoch_steps": 1000,
     "lr": 5e-06,
@@ -13,22 +13,24 @@
     "weight_decay": 0.0,
     "discount": 0.75,
     "reward": "improve",
-    "batch_size": 2,
-    "val_batch_size": 2,
+    "grad_checkpoint": true,
+    "batch_size": 1,
+    "val_batch_size": 1,
     "partial_weighted": true,
     "train_data": {
         "FILES": {
-            "path": "data_paper_clean/rcpsp/train_clauses20/*.wcnf"
+            "path": "data_paper/rcpsp/train_clauses20/*.wcnf",
+            "cache": true
         }
     },
     "val_data": {
         "FILES": {
-            "path": "data_paper_clean/rcpsp/val_clauses20/*.wcnf"
+            "path": "data_paper/rcpsp/val_clauses20/*.wcnf"
         }
     },
     "test_data": {
         "FILES": {
-            "path": "data_paper_clean/rcpsp/test/*.wcnf"
+            "path": "data_paper/rcpsp/test/*.wcnf"
         }
     }
 }

@@ -3,6 +3,7 @@ from src.utils.data_utils import load_dimacs_cnf, load_mtx, load_mc, load_nsp
 from src.data.xparser import XParser
 
 from glob import glob
+import os
 import numpy as np
 from tqdm import tqdm
 import itertools
@@ -354,12 +355,59 @@ def load_mtx_file(path):
     return data
 
 
+# Bump this whenever the parsing code above changes the resulting CSP_Data,
+# so that old cache files are ignored instead of silently reused.
+CACHE_VERSION = 1
+
+
+def parse_file(file_path):
+    postfix = file_path.split('.')[-1]
+    if postfix == 'xml':
+        data = load_xcsp3(file_path)
+    elif postfix == 'cnf':
+        data = load_cnf_file(file_path)
+    elif postfix == 'wcnf':
+        data = load_wcnf_file(file_path)
+    elif postfix == 'mc':
+        data = load_mc_file(file_path)
+    elif postfix == 'mtx':
+        data = load_mtx_file(file_path)
+    elif postfix == 'nsp':
+        data = load_nsp_file(file_path)
+    else:
+        raise ValueError(f'File type {postfix} is not supported.')
+    return data
+
+
+def cache_path(file_path):
+    return f'{file_path}.v{CACHE_VERSION}.pt'
+
+
+def load_cached(file_path):
+    """
+    Loads the parsed CSP_Data of file_path from its cache file if that exists and is newer than
+    the source file. Otherwise parses the file and writes the cache for the next time.
+    """
+    cache = cache_path(file_path)
+    if os.path.exists(cache) and os.path.getmtime(cache) >= os.path.getmtime(file_path):
+        # weights_only=False: the cache holds a whole CSP_Data object, not just tensors.
+        # Only load caches you created yourself.
+        return torch.load(cache, weights_only=False)
+
+    data = parse_file(file_path)
+    tmp = f'{cache}.tmp{os.getpid()}'
+    torch.save(data, tmp)
+    os.replace(tmp, cache)  # atomic: a killed job never leaves a half-written cache behind
+    return data
+
+
 class File_Dataset(Dataset):
 
-    def __init__(self, path, preload=True):
+    def __init__(self, path, preload=True, cache=False):
         super(File_Dataset, self).__init__()
         self.path = path
         self.files = glob(path)
+        self.cache = cache
 
         self.preload = preload
         if self.preload:
@@ -367,22 +415,9 @@ class File_Dataset(Dataset):
             self.data = [self.load_file(file_path) for file_path in tqdm(self.files)]
 
     def load_file(self, file_path):
-        postfix = file_path.split('.')[-1]
-        if postfix == 'xml':
-            data = load_xcsp3(file_path)
-        elif postfix == 'cnf':
-            data = load_cnf_file(file_path)
-        elif postfix == 'wcnf':
-            data = load_wcnf_file(file_path)
-        elif postfix == 'mc':
-            data = load_mc_file(file_path)
-        elif postfix == 'mtx':
-            data = load_mtx_file(file_path)
-        elif postfix == 'nsp':
-            data = load_nsp_file(file_path)
-        else:
-            raise ValueError(f'File type {postfix} is not supported.')
-        return data
+        if self.cache:
+            return load_cached(file_path)
+        return parse_file(file_path)
 
     def __len__(self):
         return len(self.files)
